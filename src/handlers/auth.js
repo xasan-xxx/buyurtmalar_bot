@@ -3,6 +3,7 @@ const { Markup } = require('telegraf');
 const prisma = require('../prismaClient');
 const { updateSession, resetSession } = require('../sessionStore');
 const { startKeyboard, mainMenuKeyboard } = require('../keyboards');
+const { computeTrialEndsAt } = require('./subscription');
 
 const SALT_ROUNDS = 10;
 const MIN_PASSWORD_LENGTH = 4;
@@ -83,7 +84,7 @@ async function handleRegPassword(ctx, session) {
 
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   const waiter = await prisma.waiter.create({
-    data: { username, passwordHash },
+    data: { username, passwordHash, trialEndsAt: computeTrialEndsAt() },
   });
 
   await updateSession(ctx.from.id, {

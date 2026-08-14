@@ -8,15 +8,18 @@ datasource db {
 }
 
 model Waiter {
-  id           Int          @id @default(autoincrement())
-  username     String       @unique
-  passwordHash String
-  fullName     String?
-  active       Boolean      @default(true)
-  createdAt    DateTime     @default(now())
-  orders       Order[]
-  sessions     Session[]
-  orderGroups  OrderGroup[]
+  id                     Int          @id @default(autoincrement())
+  username               String       @unique
+  passwordHash           String
+  fullName               String?
+  active                 Boolean      @default(true)
+  createdAt              DateTime     @default(now())
+  trialEndsAt            DateTime
+  subscriptionStatus     String       @default("trial")
+  subscriptionExpiresAt  DateTime?
+  orders                 Order[]
+  sessions               Session[]
+  orderGroups            OrderGroup[]
 }
 
 model OrderGroup {

@@ -1,6 +1,7 @@
 const prisma = require('../prismaClient');
 const { getSession } = require('../sessionStore');
 const { mainMenuKeyboard } = require('../keyboards');
+const { checkAccess } = require('./subscription');
 
 async function showSetupInstructions(ctx) {
   return ctx.reply(
@@ -18,6 +19,11 @@ async function handleSetGroupCommand(ctx) {
     return ctx.reply(
       "Guruhni sozlash uchun avval botga shaxsiy chatda ofitsiant sifatida kiring."
     );
+  }
+
+  const access = await checkAccess(ctx, session.waiterId);
+  if (!access.allowed) {
+    return ctx.reply(access.message);
   }
 
   const chatId = BigInt(ctx.chat.id);

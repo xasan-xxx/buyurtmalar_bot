@@ -1,6 +1,7 @@
 const prisma = require('../prismaClient');
 const { getSession, updateSession } = require('../sessionStore');
 const { orderConfirmKeyboard, mainMenuKeyboard } = require('../keyboards');
+const { checkAccess } = require('./subscription');
 
 function formatDateTime(date) {
   const pad = (n) => String(n).padStart(2, '0');
@@ -56,6 +57,14 @@ async function handleConfirmOrder(ctx) {
 
   if (session.step !== 'awaiting_confirmation' || !session.waiterId) {
     return ctx.editMessageText('Bu buyurtma allaqachon qayta ishlangan yoki eskirgan.');
+  }
+
+  const access = await checkAccess(ctx, session.waiterId);
+  if (!access.allowed) {
+    await updateSession(ctx.from.id, { step: 'idle', tempData: {} });
+    await ctx.editMessageText(access.message);
+    const group = await prisma.orderGroup.findFirst();
+    return ctx.reply('Asosiy menyu:', mainMenuKeyboard(Boolean(group)));
   }
 
   const orderGroup = await prisma.orderGroup.findFirst();

@@ -5,6 +5,8 @@ const { BTN_NEW_ORDER, BTN_ADD_GROUP, BTN_CHANGE_GROUP, BTN_LOGOUT } = require('
 const auth = require('./handlers/auth');
 const order = require('./handlers/order');
 const group = require('./handlers/group');
+const admin = require('./handlers/admin');
+const subscription = require('./handlers/subscription');
 
 const { BOT_TOKEN } = process.env;
 
@@ -17,6 +19,9 @@ const bot = new Telegraf(BOT_TOKEN);
 
 // --- Guruh sozlash buyrug'i (faqat guruh ichida ishlaydi) ---
 bot.command('setgroup', group.handleSetGroupCommand);
+
+// --- Admin: obunani qo'lda faollashtirish ---
+bot.command('activate_sub', admin.handleActivateSub);
 
 // --- /start ---
 bot.command('start', async (ctx) => {
@@ -54,10 +59,16 @@ bot.on('text', async (ctx) => {
   // Asosiy menyu tugmalari joriy jarayonni bekor qilib, yangi amalni boshlaydi.
   if (text === BTN_NEW_ORDER) {
     if (!auth.isAuthenticated(session)) return auth.showAuthChoice(ctx);
+    const access = await subscription.checkAccess(ctx, session.waiterId);
+    if (!access.allowed) return ctx.reply(access.message);
+    if (access.warning) await ctx.reply(access.warning);
     return order.startNewOrder(ctx);
   }
   if (text === BTN_ADD_GROUP || text === BTN_CHANGE_GROUP) {
     if (!auth.isAuthenticated(session)) return auth.showAuthChoice(ctx);
+    const access = await subscription.checkAccess(ctx, session.waiterId);
+    if (!access.allowed) return ctx.reply(access.message);
+    if (access.warning) await ctx.reply(access.warning);
     return group.showSetupInstructions(ctx);
   }
   if (text === BTN_LOGOUT) {
