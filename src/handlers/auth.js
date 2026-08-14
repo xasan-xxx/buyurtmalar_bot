@@ -1,4 +1,5 @@
 const bcrypt = require('bcrypt');
+const { Markup } = require('telegraf');
 const prisma = require('../prismaClient');
 const { updateSession, resetSession } = require('../sessionStore');
 const { startKeyboard, mainMenuKeyboard } = require('../keyboards');
@@ -140,7 +141,8 @@ async function handleLoginPassword(ctx, session) {
 
 async function handleLogout(ctx) {
   await resetSession(ctx.from.id);
-  return showAuthChoice(ctx, 'Chiqdingiz.');
+  await ctx.reply('Chiqdingiz', Markup.removeKeyboard());
+  return showAuthChoice(ctx);
 }
 
 module.exports = {

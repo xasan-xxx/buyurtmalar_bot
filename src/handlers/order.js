@@ -67,17 +67,20 @@ async function handleConfirmOrder(ctx) {
     return ctx.reply('Asosiy menyu:', mainMenuKeyboard(false));
   }
 
-  const waiter = await prisma.waiter.findUnique({ where: { id: session.waiterId } });
   const { tableNumber, itemsText } = session.tempData || {};
 
   const order = await prisma.order.create({
     data: { waiterId: session.waiterId, tableNumber, itemsText },
   });
 
+  const telegramName = ctx.from.last_name
+    ? `${ctx.from.first_name} ${ctx.from.last_name}`
+    : ctx.from.first_name;
+
   const message =
     `🆕 Yangi buyurtma\n` +
     `Stol: ${order.tableNumber}\n` +
-    `Ofitsiant: ${waiter.username}\n` +
+    `Ofitsiant: ${telegramName}\n` +
     `Buyurtma: ${order.itemsText}\n` +
     `Vaqt: ${formatDateTime(order.createdAt)}`;
 
