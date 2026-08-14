@@ -2,6 +2,7 @@ const prisma = require('../prismaClient');
 const { getSession, updateSession } = require('../sessionStore');
 const { orderConfirmKeyboard, mainMenuKeyboard } = require('../keyboards');
 const { checkAccess, isAdmin } = require('./subscription');
+const { askForInput } = require('./common');
 
 function formatDateTime(date) {
   const pad = (n) => String(n).padStart(2, '0');
@@ -12,7 +13,7 @@ function formatDateTime(date) {
 
 async function startNewOrder(ctx) {
   await updateSession(ctx.from.id, { step: 'awaiting_table', tempData: {} });
-  return ctx.reply("Stol raqamini kiriting (1-300):");
+  return askForInput(ctx, "Stol raqamini kiriting (1-300):");
 }
 
 async function handleTableText(ctx, session) {
@@ -20,7 +21,8 @@ async function handleTableText(ctx, session) {
   const tableNumber = Number(text);
 
   if (!Number.isInteger(tableNumber) || tableNumber < 1 || tableNumber > 300) {
-    return ctx.reply(
+    return askForInput(
+      ctx,
       "Stol raqami 1 dan 300 gacha bo'lgan butun son bo'lishi kerak. Qaytadan kiriting:"
     );
   }
@@ -29,13 +31,13 @@ async function handleTableText(ctx, session) {
     step: 'awaiting_order_text',
     tempData: { ...(session.tempData || {}), tableNumber },
   });
-  return ctx.reply("Buyurtmani yozing (masalan: 2ta lag'mon, 1ta choy):");
+  return askForInput(ctx, "Buyurtmani yozing (masalan: 2ta lag'mon, 1ta choy):");
 }
 
 async function handleOrderText(ctx, session) {
   const itemsText = ctx.message.text.trim();
   if (!itemsText) {
-    return ctx.reply("Buyurtma matni bo'sh bo'lishi mumkin emas. Qaytadan kiriting:");
+    return askForInput(ctx, "Buyurtma matni bo'sh bo'lishi mumkin emas. Qaytadan kiriting:");
   }
 
   const tableNumber = (session.tempData || {}).tableNumber;

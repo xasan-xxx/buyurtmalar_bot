@@ -3,6 +3,7 @@ const { getSession, updateSession } = require('../sessionStore');
 const { BTN_ADD_DAYS, BTN_REMOVE_DAYS, BTN_LIST_USERS, adminOnlyKeyboard } = require('../keyboards');
 const { handleListUsers } = require('./admin');
 const auth = require('./auth');
+const { askForInput } = require('./common');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -32,7 +33,7 @@ async function startAddDays(ctx) {
     step: 'admin_days_username',
     tempData: { dayAction: 'add' },
   });
-  return ctx.reply("Qaysi username'ga kun qo'shmoqchisiz?");
+  return askForInput(ctx, "Qaysi username'ga kun qo'shmoqchisiz?");
 }
 
 async function startRemoveDays(ctx) {
@@ -40,7 +41,7 @@ async function startRemoveDays(ctx) {
     step: 'admin_days_username',
     tempData: { dayAction: 'remove' },
   });
-  return ctx.reply("Qaysi username'dan kun ayirmoqchisiz?");
+  return askForInput(ctx, "Qaysi username'dan kun ayirmoqchisiz?");
 }
 
 async function handleDaysUsername(ctx, session) {
@@ -61,7 +62,7 @@ async function handleDaysUsername(ctx, session) {
 
   const question =
     dayAction === 'add' ? "Nechta kun qo'shmoqchisiz?" : 'Nechta kun ayirmoqchisiz?';
-  return ctx.reply(question);
+  return askForInput(ctx, question);
 }
 
 async function handleDaysCount(ctx, session) {
@@ -69,7 +70,7 @@ async function handleDaysCount(ctx, session) {
   const days = Number(raw);
 
   if (!Number.isInteger(days) || days <= 0) {
-    return ctx.reply("Kun soni musbat butun son bo'lishi kerak. Qaytadan kiriting:");
+    return askForInput(ctx, "Kun soni musbat butun son bo'lishi kerak. Qaytadan kiriting:");
   }
 
   const { dayAction, username } = session.tempData || {};
@@ -156,5 +157,6 @@ async function maybeHandleAdminText(ctx, session, text) {
 
 module.exports = {
   sendAdminMenu,
+  returnToMenu,
   maybeHandleAdminText,
 };

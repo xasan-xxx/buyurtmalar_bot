@@ -16,6 +16,7 @@ const admin = require('./handlers/admin');
 const subscription = require('./handlers/subscription');
 const support = require('./handlers/support');
 const adminPanel = require('./handlers/adminPanel');
+const cancel = require('./handlers/cancel');
 
 const { BOT_TOKEN } = process.env;
 
@@ -54,6 +55,14 @@ bot.action('auth:login', async (ctx) => {
 
 bot.action('order:confirm', order.handleConfirmOrder);
 bot.action('order:cancel', order.handleCancelOrder);
+
+// --- Barcha "kiriting" bosqichlari uchun umumiy bekor qilish tugmasi ---
+bot.action('cancel_action', cancel.handleCancelAction);
+
+// --- Admin: userlar ro'yxatida akkountni o'chirish ---
+bot.action(/^admin:del_ask:(\d+)$/, admin.handleDeleteAsk);
+bot.action(/^admin:del_yes:(\d+)$/, admin.handleDeleteConfirm);
+bot.action(/^admin:del_no:(\d+)$/, admin.handleDeleteCancel);
 
 // --- Matnli xabarlar (faqat shaxsiy chat) ---
 bot.on('text', async (ctx) => {

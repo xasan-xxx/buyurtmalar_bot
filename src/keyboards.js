@@ -52,6 +52,13 @@ function orderConfirmKeyboard() {
   ]);
 }
 
+// Matn/raqam kutilayotgan har bir bosqichda ko'rsatiladigan umumiy bekor qilish tugmasi.
+function cancelKeyboard() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback('❌ Bekor qilish', 'cancel_action')],
+  ]);
+}
+
 module.exports = {
   BTN_NEW_ORDER,
   BTN_ADD_GROUP,
@@ -66,4 +73,5 @@ module.exports = {
   mainMenuKeyboard,
   adminOnlyKeyboard,
   orderConfirmKeyboard,
+  cancelKeyboard,
 };
