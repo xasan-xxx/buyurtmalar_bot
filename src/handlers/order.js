@@ -1,7 +1,7 @@
 const prisma = require('../prismaClient');
 const { getSession, updateSession } = require('../sessionStore');
 const { orderConfirmKeyboard, mainMenuKeyboard } = require('../keyboards');
-const { checkAccess } = require('./subscription');
+const { checkAccess, isAdmin } = require('./subscription');
 
 function formatDateTime(date) {
   const pad = (n) => String(n).padStart(2, '0');
@@ -63,17 +63,19 @@ async function handleConfirmOrder(ctx) {
   if (!access.allowed) {
     await updateSession(ctx.from.id, { step: 'idle', tempData: {} });
     await ctx.editMessageText(access.message);
-    const group = await prisma.orderGroup.findFirst();
-    return ctx.reply('Asosiy menyu:', mainMenuKeyboard(Boolean(group)));
+    const group = await prisma.orderGroup.findUnique({ where: { waiterId: session.waiterId } });
+    return ctx.reply('Asosiy menyu:', mainMenuKeyboard(Boolean(group), { isAdmin: isAdmin(ctx) }));
   }
 
-  const orderGroup = await prisma.orderGroup.findFirst();
+  const orderGroup = await prisma.orderGroup.findUnique({
+    where: { waiterId: session.waiterId },
+  });
   if (!orderGroup) {
     await updateSession(ctx.from.id, { step: 'idle', tempData: {} });
     await ctx.editMessageText(
       "Guruh hali sozlanmagan, avval 'Guruh qo'shish' orqali sozlang."
     );
-    return ctx.reply('Asosiy menyu:', mainMenuKeyboard(false));
+    return ctx.reply('Asosiy menyu:', mainMenuKeyboard(false, { isAdmin: isAdmin(ctx) }));
   }
 
   const { tableNumber, itemsText } = session.tempData || {};
@@ -100,22 +102,28 @@ async function handleConfirmOrder(ctx) {
     await ctx.editMessageText(
       "Buyurtma DB'ga saqlandi, lekin guruhga xabar yuborib bo'lmadi. Admin bilan bog'laning."
     );
-    return ctx.reply('Asosiy menyu:', mainMenuKeyboard(true));
+    return ctx.reply('Asosiy menyu:', mainMenuKeyboard(true, { isAdmin: isAdmin(ctx) }));
   }
 
   await updateSession(ctx.from.id, { step: 'idle', tempData: {} });
   await ctx.editMessageText('Buyurtma yuborildi ✅');
-  return ctx.reply('Asosiy menyu:', mainMenuKeyboard(true));
+  return ctx.reply('Asosiy menyu:', mainMenuKeyboard(true, { isAdmin: isAdmin(ctx) }));
 }
 
 async function handleCancelOrder(ctx) {
   await ctx.answerCbQuery();
 
+  const session = await getSession(ctx.from.id);
   await updateSession(ctx.from.id, { step: 'idle', tempData: {} });
 
   await ctx.editMessageText('Buyurtma bekor qilindi ❌');
-  const group = await prisma.orderGroup.findFirst();
-  return ctx.reply('Asosiy menyu:', mainMenuKeyboard(Boolean(group)));
+  const group = session.waiterId
+    ? await prisma.orderGroup.findUnique({ where: { waiterId: session.waiterId } })
+    : null;
+  return ctx.reply(
+    'Asosiy menyu:',
+    mainMenuKeyboard(Boolean(group), { isAdmin: isAdmin(ctx) })
+  );
 }
 
 module.exports = {

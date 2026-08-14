@@ -1,13 +1,10 @@
-const { Markup } = require('telegraf');
 const prisma = require('../prismaClient');
-const { updateSession } = require('../sessionStore');
+const { getSession, updateSession } = require('../sessionStore');
+const { BTN_ADD_DAYS, BTN_REMOVE_DAYS, BTN_LIST_USERS, adminOnlyKeyboard } = require('../keyboards');
 const { handleListUsers } = require('./admin');
+const auth = require('./auth');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-const BTN_ADD_DAYS = "➕ Kun qo'shish";
-const BTN_REMOVE_DAYS = '➖ Kun ayirish';
-const BTN_LIST_USERS = "👥 Userlar ro'yxati";
 
 function formatDateTime(date) {
   const pad = (n) => String(n).padStart(2, '0');
@@ -16,12 +13,18 @@ function formatDateTime(date) {
   )}:${pad(date.getMinutes())}`;
 }
 
-function adminMenuKeyboard() {
-  return Markup.keyboard([[BTN_ADD_DAYS], [BTN_REMOVE_DAYS], [BTN_LIST_USERS]]).resize();
+async function sendAdminMenu(ctx, text = '🛠 Admin panel:') {
+  return ctx.reply(text, adminOnlyKeyboard());
 }
 
-async function sendAdminMenu(ctx, text = '🛠 Admin panel:') {
-  return ctx.reply(text, adminMenuKeyboard());
+// Amal tugagach: agar admin o'zi ham login qilgan ofitsiant bo'lsa - to'liq asosiy
+// menyuga (admin qatorlari bilan birga) qaytaradi, aks holda mustaqil admin panelini ko'rsatadi.
+async function returnToMenu(ctx) {
+  const session = await getSession(ctx.from.id);
+  if (session.waiterId) {
+    return auth.sendMainMenu(ctx, session.waiterId);
+  }
+  return sendAdminMenu(ctx);
 }
 
 async function startAddDays(ctx) {
@@ -47,7 +50,7 @@ async function handleDaysUsername(ctx, session) {
   if (!waiter) {
     await updateSession(ctx.from.id, { step: 'idle', tempData: {} });
     await ctx.reply('Bunday foydalanuvchi topilmadi');
-    return sendAdminMenu(ctx);
+    return returnToMenu(ctx);
   }
 
   const { dayAction } = session.tempData || {};
@@ -75,7 +78,7 @@ async function handleDaysCount(ctx, session) {
   if (!waiter) {
     await updateSession(ctx.from.id, { step: 'idle', tempData: {} });
     await ctx.reply('Bunday foydalanuvchi topilmadi');
-    return sendAdminMenu(ctx);
+    return returnToMenu(ctx);
   }
 
   const now = new Date();
@@ -102,7 +105,7 @@ async function handleDaysCount(ctx, session) {
         newExpiresAt
       )}`
     );
-    return sendAdminMenu(ctx);
+    return returnToMenu(ctx);
   }
 
   // dayAction === 'remove'
@@ -121,35 +124,37 @@ async function handleDaysCount(ctx, session) {
       newExpiresAt
     )}`
   );
-  return sendAdminMenu(ctx);
+  return returnToMenu(ctx);
 }
 
-async function handleAdminText(ctx, session, text) {
+// Admin uchun matnni ushlab qoladi va agar admin panelga tegishli bo'lsa true qaytaradi.
+// Aks holda false qaytaradi - chaqiruvchi (bot.js) oddiy ofitsiant oqimiga o'tkazadi,
+// shunday qilib admin ham o'zi uchun akkount ochib, oddiy foydalanuvchi kabi ishlata oladi.
+async function maybeHandleAdminText(ctx, session, text) {
   if (text === BTN_ADD_DAYS) {
-    return startAddDays(ctx);
+    await startAddDays(ctx);
+    return true;
   }
   if (text === BTN_REMOVE_DAYS) {
-    return startRemoveDays(ctx);
+    await startRemoveDays(ctx);
+    return true;
   }
   if (text === BTN_LIST_USERS) {
-    return handleListUsers(ctx);
+    await handleListUsers(ctx);
+    return true;
   }
-
-  switch (session.step) {
-    case 'admin_days_username':
-      return handleDaysUsername(ctx, session);
-    case 'admin_days_count':
-      return handleDaysCount(ctx, session);
-    default:
-      return sendAdminMenu(ctx);
+  if (session.step === 'admin_days_username') {
+    await handleDaysUsername(ctx, session);
+    return true;
   }
+  if (session.step === 'admin_days_count') {
+    await handleDaysCount(ctx, session);
+    return true;
+  }
+  return false;
 }
 
 module.exports = {
-  BTN_ADD_DAYS,
-  BTN_REMOVE_DAYS,
-  BTN_LIST_USERS,
-  adminMenuKeyboard,
   sendAdminMenu,
-  handleAdminText,
+  maybeHandleAdminText,
 };

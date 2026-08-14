@@ -1,7 +1,7 @@
 const prisma = require('../prismaClient');
 const { getSession } = require('../sessionStore');
 const { mainMenuKeyboard } = require('../keyboards');
-const { checkAccess } = require('./subscription');
+const { checkAccess, isAdmin } = require('./subscription');
 
 async function showSetupInstructions(ctx) {
   return ctx.reply(
@@ -29,18 +29,24 @@ async function handleSetGroupCommand(ctx) {
   const chatId = BigInt(ctx.chat.id);
   const name = ctx.chat.title || null;
 
-  const existing = await prisma.orderGroup.findFirst();
+  // Shu jismoniy Telegram guruhi allaqachon boshqa akkountga bog'langanmi tekshiramiz.
+  const chatOwner = await prisma.orderGroup.findUnique({ where: { chatId } });
+  if (chatOwner && chatOwner.waiterId !== session.waiterId) {
+    return ctx.reply("Bu guruh allaqachon boshqa akkountga bog'langan.");
+  }
+
+  const existing = await prisma.orderGroup.findUnique({
+    where: { waiterId: session.waiterId },
+  });
+
   if (existing) {
-    if (existing.createdByWaiterId !== session.waiterId) {
-      return ctx.reply("Faqat guruhni yaratgan foydalanuvchi uni o'zgartira oladi.");
-    }
     await prisma.orderGroup.update({
       where: { id: existing.id },
       data: { chatId, name, setAt: new Date() },
     });
   } else {
     await prisma.orderGroup.create({
-      data: { chatId, name, createdByWaiterId: session.waiterId },
+      data: { chatId, name, waiterId: session.waiterId },
     });
   }
 
@@ -50,7 +56,7 @@ async function handleSetGroupCommand(ctx) {
     await ctx.telegram.sendMessage(
       ctx.from.id,
       'Guruh muvaffaqiyatli sozlandi',
-      mainMenuKeyboard(true)
+      mainMenuKeyboard(true, { isAdmin: isAdmin(ctx) })
     );
   } catch (err) {
     // Foydalanuvchi bot bilan private chatni boshlamagan bo'lishi mumkin, e'tiborsiz qoldiriladi.

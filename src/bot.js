@@ -37,9 +37,6 @@ bot.command('reset_password', admin.handleResetPassword);
 // --- /start ---
 bot.command('start', async (ctx) => {
   if (ctx.chat.type !== 'private') return;
-  if (subscription.isAdmin(ctx)) {
-    return adminPanel.sendAdminMenu(ctx);
-  }
   const session = await getSession(ctx.from.id);
   return auth.handleStart(ctx, session);
 });
@@ -70,9 +67,11 @@ bot.on('text', async (ctx) => {
 
   const session = await getSession(ctx.from.id);
 
-  // Admin uchun alohida panel - login/akkount oqimlariga aralashmaydi.
+  // Admin panelga tegishli tugma/qadam bo'lsa shu yerda ushlab qolinadi;
+  // aks holda admin ham oddiy ofitsiant oqimidan (pastda) foydalana oladi.
   if (subscription.isAdmin(ctx)) {
-    return adminPanel.handleAdminText(ctx, session, text);
+    const handledByAdminPanel = await adminPanel.maybeHandleAdminText(ctx, session, text);
+    if (handledByAdminPanel) return;
   }
 
   // Asosiy menyu tugmalari joriy jarayonni bekor qilib, yangi amalni boshlaydi.
@@ -127,7 +126,7 @@ bot.on('text', async (ctx) => {
       );
     default:
       if (auth.isAuthenticated(session)) {
-        return auth.sendMainMenu(ctx);
+        return auth.sendMainMenu(ctx, session.waiterId);
       }
       return auth.showAuthChoice(ctx);
   }

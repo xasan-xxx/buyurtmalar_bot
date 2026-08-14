@@ -20,16 +20,16 @@ model Waiter {
   subscriptionExpiresAt  DateTime?
   orders                 Order[]
   sessions               Session[]
-  orderGroups            OrderGroup[]
+  orderGroup             OrderGroup?
 }
 
 model OrderGroup {
-  id                Int      @id @default(autoincrement())
-  chatId            BigInt   @unique
-  name              String?
-  createdByWaiterId Int
-  createdBy         Waiter   @relation(fields: [createdByWaiterId], references: [id])
-  setAt             DateTime @default(now())
+  id       Int      @id @default(autoincrement())
+  chatId   BigInt   @unique
+  name     String?
+  waiterId Int      @unique
+  waiter   Waiter   @relation(fields: [waiterId], references: [id])
+  setAt    DateTime @default(now())
 }
 
 model Order {

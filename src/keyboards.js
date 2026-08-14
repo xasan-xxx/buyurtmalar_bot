@@ -7,6 +7,10 @@ const BTN_SUPPORT = '🆘 Yordam (Support)';
 const BTN_RESET_PASSWORD = "🔑 Parolni almashtirish";
 const BTN_LOGOUT = '🚪 Akkountdan chiqish';
 
+const BTN_ADD_DAYS = "➕ Kun qo'shish";
+const BTN_REMOVE_DAYS = '➖ Kun ayirish';
+const BTN_LIST_USERS = "👥 Userlar ro'yxati";
+
 function startKeyboard() {
   return Markup.inlineKeyboard([
     [Markup.button.callback('Akkount yaratish', 'auth:register')],
@@ -14,15 +18,29 @@ function startKeyboard() {
   ]);
 }
 
-function mainMenuKeyboard(hasGroup) {
+// Admin uchun asosiy menyuga qo'shimcha ravishda pastda doim ko'rinadigan qatorlar.
+function adminExtraRows() {
+  return [[BTN_ADD_DAYS], [BTN_REMOVE_DAYS], [BTN_LIST_USERS]];
+}
+
+function mainMenuKeyboard(hasGroup, { isAdmin = false } = {}) {
   const groupLabel = hasGroup ? BTN_CHANGE_GROUP : BTN_ADD_GROUP;
-  return Markup.keyboard([
+  const rows = [
     [BTN_NEW_ORDER],
     [groupLabel],
     [BTN_RESET_PASSWORD],
     [BTN_SUPPORT],
     [BTN_LOGOUT],
-  ]).resize();
+  ];
+  if (isAdmin) {
+    rows.push(...adminExtraRows());
+  }
+  return Markup.keyboard(rows).resize();
+}
+
+// Admin hali login qilmagan bo'lsa ham doim ko'rinadigan mustaqil admin klaviaturasi.
+function adminOnlyKeyboard() {
+  return Markup.keyboard(adminExtraRows()).resize();
 }
 
 function orderConfirmKeyboard() {
@@ -41,7 +59,11 @@ module.exports = {
   BTN_SUPPORT,
   BTN_RESET_PASSWORD,
   BTN_LOGOUT,
+  BTN_ADD_DAYS,
+  BTN_REMOVE_DAYS,
+  BTN_LIST_USERS,
   startKeyboard,
   mainMenuKeyboard,
+  adminOnlyKeyboard,
   orderConfirmKeyboard,
 };

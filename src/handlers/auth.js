@@ -2,8 +2,8 @@ const bcrypt = require('bcrypt');
 const { Markup } = require('telegraf');
 const prisma = require('../prismaClient');
 const { updateSession, resetSession } = require('../sessionStore');
-const { startKeyboard, mainMenuKeyboard } = require('../keyboards');
-const { computeTrialEndsAt } = require('./subscription');
+const { startKeyboard, mainMenuKeyboard, adminOnlyKeyboard } = require('../keyboards');
+const { computeTrialEndsAt, isAdmin } = require('./subscription');
 
 const SALT_ROUNDS = 10;
 const MIN_PASSWORD_LENGTH = 4;
@@ -25,22 +25,32 @@ function isAuthenticated(session) {
   return Boolean(session && session.waiterId);
 }
 
-async function sendMainMenu(ctx, text = 'Asosiy menyu:') {
-  const group = await prisma.orderGroup.findFirst();
-  return ctx.reply(text, mainMenuKeyboard(Boolean(group)));
+async function sendAdminExtras(ctx) {
+  if (isAdmin(ctx)) {
+    await ctx.reply("🛠 Admin panel (qo'shimcha):", adminOnlyKeyboard());
+  }
+}
+
+async function sendMainMenu(ctx, waiterId, text = 'Asosiy menyu:') {
+  const group = waiterId
+    ? await prisma.orderGroup.findUnique({ where: { waiterId } })
+    : null;
+  return ctx.reply(text, mainMenuKeyboard(Boolean(group), { isAdmin: isAdmin(ctx) }));
 }
 
 async function showAuthChoice(ctx, text = "Xush kelibsiz! Davom etish uchun tanlang:") {
-  return ctx.reply(text, startKeyboard());
+  await ctx.reply(text, startKeyboard());
+  return sendAdminExtras(ctx);
 }
 
 async function handleStart(ctx, session) {
   if (isAuthenticated(session)) {
     await updateSession(ctx.from.id, { step: 'idle', tempData: {} });
-    return sendMainMenu(ctx);
+    return sendMainMenu(ctx, session.waiterId);
   }
   await resetSession(ctx.from.id);
-  return ctx.reply(WELCOME_TEXT, startKeyboard());
+  await ctx.reply(WELCOME_TEXT, startKeyboard());
+  return sendAdminExtras(ctx);
 }
 
 // --- Akkount yaratish ---
@@ -98,7 +108,7 @@ async function handleRegPassword(ctx, session) {
     tempData: {},
   });
 
-  return sendMainMenu(ctx, 'Akkount yaratildi ✅');
+  return sendMainMenu(ctx, waiter.id, 'Akkount yaratildi ✅');
 }
 
 // --- Akkountga kirish ---
@@ -154,7 +164,7 @@ async function handleLoginPassword(ctx, session) {
     tempData: {},
   });
 
-  return sendMainMenu(ctx, 'Kirdingiz ✅');
+  return sendMainMenu(ctx, waiter.id, 'Kirdingiz ✅');
 }
 
 async function handleLogout(ctx) {
@@ -169,7 +179,7 @@ async function startResetPasswordSelf(ctx, session) {
   const waiter = await prisma.waiter.findUnique({ where: { id: session.waiterId } });
   if (!waiter) {
     await resetSession(ctx.from.id);
-    return ctx.reply('Akkount topilmadi.', startKeyboard());
+    return showAuthChoice(ctx, 'Akkount topilmadi.');
   }
 
   if (String(waiter.creatorTelegramId) !== String(ctx.from.id)) {
@@ -197,7 +207,7 @@ async function handleResetPasswordSelfText(ctx, session) {
   });
 
   await updateSession(ctx.from.id, { step: 'idle', tempData: {} });
-  return sendMainMenu(ctx, '✅ Parol muvaffaqiyatli o\'zgartirildi');
+  return sendMainMenu(ctx, session.waiterId, '✅ Parol muvaffaqiyatli o\'zgartirildi');
 }
 
 module.exports = {
