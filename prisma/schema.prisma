@@ -8,13 +8,15 @@ datasource db {
 }
 
 model Waiter {
-  id           Int      @id @default(autoincrement())
-  login        String   @unique
+  id           Int       @id @default(autoincrement())
+  email        String
+  username     String    @unique
   passwordHash String
-  fullName     String
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  fullName     String?
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
   orders       Order[]
+  sessions     Session[]
 }
 
 model OrderGroup {
@@ -31,4 +33,13 @@ model Order {
   tableNumber Int
   itemsText   String
   createdAt   DateTime @default(now())
+}
+
+model Session {
+  telegramId BigInt   @id
+  waiterId   Int?
+  waiter     Waiter?  @relation(fields: [waiterId], references: [id])
+  step       String   @default("idle")
+  tempData   Json?
+  updatedAt  DateTime @updatedAt
 }

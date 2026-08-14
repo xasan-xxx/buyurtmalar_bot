@@ -1,70 +1,96 @@
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
-const { sessionMiddleware } = require('./session');
+const { getSession } = require('./sessionStore');
+const { BTN_NEW_ORDER, BTN_ADD_GROUP, BTN_CHANGE_GROUP, BTN_LOGOUT } = require('./keyboards');
 const auth = require('./handlers/auth');
 const order = require('./handlers/order');
-const admin = require('./handlers/admin');
+const group = require('./handlers/group');
 
-const { BOT_TOKEN, ADMIN_TELEGRAM_ID } = process.env;
+const { BOT_TOKEN } = process.env;
 
 if (!BOT_TOKEN) {
   console.error('XATOLIK: .env faylida BOT_TOKEN topilmadi.');
   process.exit(1);
 }
-if (!ADMIN_TELEGRAM_ID) {
-  console.error('XATOLIK: .env faylida ADMIN_TELEGRAM_ID topilmadi.');
-  process.exit(1);
-}
 
 const bot = new Telegraf(BOT_TOKEN);
 
-bot.use(sessionMiddleware());
+// --- Guruh sozlash buyrug'i (faqat guruh ichida ishlaydi) ---
+bot.command('setgroup', group.handleSetGroupCommand);
 
-// --- Admin buyruqlari (faqat ADMIN_TELEGRAM_ID uchun) ---
-bot.command('add_waiter', admin.adminOnly(), admin.handleAddWaiter);
-bot.command('list_waiters', admin.adminOnly(), admin.handleListWaiters);
-bot.command('remove_waiter', admin.adminOnly(), admin.handleRemoveWaiter);
-bot.command('setgroup', admin.adminOnly(), admin.handleSetGroup);
-
-// --- Ofitsiant flow ---
+// --- /start ---
 bot.command('start', async (ctx) => {
   if (ctx.chat.type !== 'private') return;
-  return auth.handleStart(ctx);
+  const session = await getSession(ctx.from.id);
+  return auth.handleStart(ctx, session);
 });
 
-bot.action('confirm_order', order.handleConfirmOrder);
-bot.action('cancel_order', order.handleCancelOrder);
+// --- Inline tugmalar ---
+bot.action('auth:register', async (ctx) => {
+  await ctx.answerCbQuery();
+  return auth.startRegistration(ctx);
+});
 
+bot.action('auth:login', async (ctx) => {
+  await ctx.answerCbQuery();
+  return auth.startLogin(ctx);
+});
+
+bot.action('order:confirm', order.handleConfirmOrder);
+bot.action('order:cancel', order.handleCancelOrder);
+
+// --- Matnli xabarlar (faqat shaxsiy chat) ---
 bot.on('text', async (ctx) => {
   if (ctx.chat.type !== 'private') return;
 
-  const session = ctx.session;
-  const text = ctx.message.text;
+  const text = ctx.message.text.trim();
 
   if (text.startsWith('/')) {
-    if (!auth.isAuthenticated(session)) {
-      return auth.startLogin(ctx);
-    }
     return;
   }
 
+  const session = await getSession(ctx.from.id);
+
+  // Asosiy menyu tugmalari joriy jarayonni bekor qilib, yangi amalni boshlaydi.
+  if (text === BTN_NEW_ORDER) {
+    if (!auth.isAuthenticated(session)) return auth.showAuthChoice(ctx);
+    return order.startNewOrder(ctx);
+  }
+  if (text === BTN_ADD_GROUP || text === BTN_CHANGE_GROUP) {
+    if (!auth.isAuthenticated(session)) return auth.showAuthChoice(ctx);
+    return group.showSetupInstructions(ctx);
+  }
+  if (text === BTN_LOGOUT) {
+    if (!auth.isAuthenticated(session)) return auth.showAuthChoice(ctx);
+    return auth.handleLogout(ctx);
+  }
+
   switch (session.step) {
-    case 'awaiting_login':
-      return auth.handleLoginText(ctx);
-    case 'awaiting_password':
-      return auth.handlePasswordText(ctx);
+    case 'reg_email':
+      return auth.handleRegEmail(ctx, session);
+    case 'reg_username':
+      return auth.handleRegUsername(ctx, session);
+    case 'reg_password':
+      return auth.handleRegPassword(ctx, session);
+    case 'login_username':
+      return auth.handleLoginUsername(ctx, session);
+    case 'login_password':
+      return auth.handleLoginPassword(ctx, session);
     case 'awaiting_table':
-      if (!auth.isAuthenticated(session)) return auth.startLogin(ctx);
-      return order.handleTableText(ctx);
+      if (!auth.isAuthenticated(session)) return auth.showAuthChoice(ctx);
+      return order.handleTableText(ctx, session);
     case 'awaiting_order_text':
-      if (!auth.isAuthenticated(session)) return auth.startLogin(ctx);
-      return order.handleOrderText(ctx);
+      if (!auth.isAuthenticated(session)) return auth.showAuthChoice(ctx);
+      return order.handleOrderText(ctx, session);
     case 'awaiting_confirmation':
       return ctx.reply(
         "Iltimos, yuqoridagi tugmalardan birini bosing: Tasdiqlash yoki Bekor qilish."
       );
     default:
-      return auth.startLogin(ctx);
+      if (auth.isAuthenticated(session)) {
+        return auth.sendMainMenu(ctx);
+      }
+      return auth.showAuthChoice(ctx);
   }
 });
 
@@ -72,12 +98,15 @@ bot.catch((err, ctx) => {
   console.error(`Xatolik yuz berdi (update ${ctx.updateType}):`, err);
 });
 
-bot.launch().then(() => {
-  console.log('Bot ishga tushdi.');
-}).catch((err) => {
-  console.error('Botni ishga tushirib bo\'lmadi:', err.message);
-  process.exit(1);
-});
+bot
+  .launch()
+  .then(() => {
+    console.log('Bot ishga tushdi.');
+  })
+  .catch((err) => {
+    console.error("Botni ishga tushirib bo'lmadi:", err.message);
+    process.exit(1);
+  });
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));

@@ -1,83 +1,172 @@
 const bcrypt = require('bcrypt');
 const prisma = require('../prismaClient');
-const { defaultSession } = require('../session');
+const { updateSession, resetSession } = require('../sessionStore');
+const { startKeyboard, mainMenuKeyboard } = require('../keyboards');
 
-const MAX_LOGIN_ATTEMPTS = 5;
-const BLOCK_DURATION_MS = 60 * 1000;
+const SALT_ROUNDS = 10;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 4;
+const MAX_LOGIN_ATTEMPTS = 3;
 
 function isAuthenticated(session) {
-  return Boolean(session.waiterId);
+  return Boolean(session && session.waiterId);
 }
 
-function startLogin(ctx) {
-  Object.assign(ctx.session, defaultSession());
-  ctx.session.step = 'awaiting_login';
-  return ctx.reply('Login kiriting:');
+async function sendMainMenu(ctx, text = 'Asosiy menyu:') {
+  const group = await prisma.orderGroup.findFirst();
+  return ctx.reply(text, mainMenuKeyboard(Boolean(group)));
 }
 
-async function handleStart(ctx) {
-  if (isAuthenticated(ctx.session)) {
-    ctx.session.step = 'awaiting_table';
-    return ctx.reply(`Xush kelibsiz, ${ctx.session.waiterFullName}!\nStol raqamini kiriting (1-50):`);
+async function showAuthChoice(ctx, text = "Xush kelibsiz! Davom etish uchun tanlang:") {
+  return ctx.reply(text, startKeyboard());
+}
+
+async function handleStart(ctx, session) {
+  if (isAuthenticated(session)) {
+    await updateSession(ctx.from.id, { step: 'idle', tempData: {} });
+    return sendMainMenu(ctx);
   }
-  return startLogin(ctx);
+  await resetSession(ctx.from.id);
+  return showAuthChoice(ctx);
 }
 
-async function handleLoginText(ctx) {
-  const login = ctx.message.text.trim();
-  if (!login) {
-    return ctx.reply('Login bo\'sh bo\'lishi mumkin emas. Qayta kiriting:');
-  }
-  ctx.session.tempLogin = login;
-  ctx.session.step = 'awaiting_password';
-  return ctx.reply('Parol kiriting:');
+// --- Akkount yaratish ---
+
+async function startRegistration(ctx) {
+  await updateSession(ctx.from.id, { step: 'reg_email', tempData: {} });
+  return ctx.reply('Gmail manzilingizni kiriting:');
 }
 
-async function handlePasswordText(ctx) {
-  const now = Date.now();
-  if (ctx.session.blockedUntil && now < ctx.session.blockedUntil) {
-    const secondsLeft = Math.ceil((ctx.session.blockedUntil - now) / 1000);
-    return ctx.reply(`Juda ko'p xato urinish. ${secondsLeft} soniyadan keyin qayta urinib ko'ring.`);
+async function handleRegEmail(ctx, session) {
+  const email = ctx.message.text.trim();
+  if (!EMAIL_REGEX.test(email)) {
+    return ctx.reply("Email formati noto'g'ri. Qaytadan kiriting:");
+  }
+  await updateSession(ctx.from.id, {
+    step: 'reg_username',
+    tempData: { ...(session.tempData || {}), email },
+  });
+  return ctx.reply('Username tanlang:');
+}
+
+async function handleRegUsername(ctx, session) {
+  const username = ctx.message.text.trim();
+  if (!username) {
+    return ctx.reply("Username bo'sh bo'lishi mumkin emas. Qaytadan kiriting:");
   }
 
+  const existing = await prisma.waiter.findUnique({ where: { username } });
+  if (existing) {
+    return ctx.reply('Bu username band, boshqa username tanlang:');
+  }
+
+  await updateSession(ctx.from.id, {
+    step: 'reg_password',
+    tempData: { ...(session.tempData || {}), username },
+  });
+  return ctx.reply("Parol o'ylab toping (kamida 4 belgi):");
+}
+
+async function handleRegPassword(ctx, session) {
   const password = ctx.message.text;
-  const login = ctx.session.tempLogin;
-
-  const waiter = await prisma.waiter.findUnique({ where: { login } });
-
-  let ok = false;
-  if (waiter && waiter.active) {
-    ok = await bcrypt.compare(password, waiter.passwordHash);
+  if (!password || password.length < MIN_PASSWORD_LENGTH) {
+    return ctx.reply(
+      `Parol kamida ${MIN_PASSWORD_LENGTH} belgidan iborat bo'lishi kerak. Qaytadan kiriting:`
+    );
   }
+
+  const { email, username } = session.tempData || {};
+  if (!email || !username) {
+    await resetSession(ctx.from.id);
+    return showAuthChoice(ctx, "Nimadir xato ketdi, qaytadan boshlaymiz.");
+  }
+
+  const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+  const waiter = await prisma.waiter.create({
+    data: { email, username, passwordHash },
+  });
+
+  await updateSession(ctx.from.id, {
+    step: 'idle',
+    waiterId: waiter.id,
+    tempData: {},
+  });
+
+  return sendMainMenu(ctx, 'Akkount yaratildi ✅');
+}
+
+// --- Akkountga kirish ---
+
+async function startLogin(ctx) {
+  await updateSession(ctx.from.id, { step: 'login_username', tempData: {} });
+  return ctx.reply('Username kiriting:');
+}
+
+async function handleLoginUsername(ctx) {
+  const username = ctx.message.text.trim();
+
+  const waiter = await prisma.waiter.findUnique({ where: { username } });
+  if (!waiter || !waiter.active) {
+    await resetSession(ctx.from.id);
+    return showAuthChoice(ctx, 'Bunday foydalanuvchi topilmadi.');
+  }
+
+  await updateSession(ctx.from.id, {
+    step: 'login_password',
+    tempData: { loginUsername: username, loginAttempts: 0 },
+  });
+  return ctx.reply('Parolni kiriting:');
+}
+
+async function handleLoginPassword(ctx, session) {
+  const password = ctx.message.text;
+  const { loginUsername, loginAttempts = 0 } = session.tempData || {};
+
+  const waiter = loginUsername
+    ? await prisma.waiter.findUnique({ where: { username: loginUsername } })
+    : null;
+
+  const ok = Boolean(
+    waiter && waiter.active && (await bcrypt.compare(password, waiter.passwordHash))
+  );
 
   if (!ok) {
-    ctx.session.loginAttempts += 1;
-    if (ctx.session.loginAttempts >= MAX_LOGIN_ATTEMPTS) {
-      ctx.session.blockedUntil = now + BLOCK_DURATION_MS;
-      ctx.session.loginAttempts = 0;
-      ctx.session.step = 'awaiting_login';
-      ctx.session.tempLogin = null;
-      return ctx.reply('Juda ko\'p xato urinish. 1 daqiqaga bloklandingiz.');
+    const attempts = loginAttempts + 1;
+    if (attempts >= MAX_LOGIN_ATTEMPTS) {
+      await updateSession(ctx.from.id, { step: 'login_username', tempData: {} });
+      return ctx.reply("Parol xato. Urinishlar tugadi. Username qaytadan kiriting:");
     }
-    ctx.session.step = 'awaiting_login';
-    ctx.session.tempLogin = null;
-    return ctx.reply('Login yoki parol xato. Qayta login kiriting:');
+    await updateSession(ctx.from.id, {
+      tempData: { ...(session.tempData || {}), loginAttempts: attempts },
+    });
+    return ctx.reply(`Parol xato. Qaytadan kiriting: (${attempts}/${MAX_LOGIN_ATTEMPTS})`);
   }
 
-  ctx.session.loginAttempts = 0;
-  ctx.session.blockedUntil = null;
-  ctx.session.waiterId = waiter.id;
-  ctx.session.waiterFullName = waiter.fullName;
-  ctx.session.tempLogin = null;
-  ctx.session.step = 'awaiting_table';
+  await updateSession(ctx.from.id, {
+    step: 'idle',
+    waiterId: waiter.id,
+    tempData: {},
+  });
 
-  return ctx.reply(`Muvaffaqiyatli kirdingiz, ${waiter.fullName}!\nStol raqamini kiriting (1-50):`);
+  return sendMainMenu(ctx, 'Kirdingiz ✅');
+}
+
+async function handleLogout(ctx) {
+  await resetSession(ctx.from.id);
+  return showAuthChoice(ctx, 'Chiqdingiz.');
 }
 
 module.exports = {
   isAuthenticated,
-  startLogin,
+  sendMainMenu,
+  showAuthChoice,
   handleStart,
-  handleLoginText,
-  handlePasswordText,
+  startRegistration,
+  handleRegEmail,
+  handleRegUsername,
+  handleRegPassword,
+  startLogin,
+  handleLoginUsername,
+  handleLoginPassword,
+  handleLogout,
 };

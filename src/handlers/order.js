@@ -1,112 +1,113 @@
-const { Markup } = require('telegraf');
 const prisma = require('../prismaClient');
+const { getSession, updateSession } = require('../sessionStore');
+const { orderConfirmKeyboard, mainMenuKeyboard } = require('../keyboards');
 
 function formatDateTime(date) {
   const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()} ${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}`;
 }
 
-async function handleTableText(ctx) {
+async function startNewOrder(ctx) {
+  await updateSession(ctx.from.id, { step: 'awaiting_table', tempData: {} });
+  return ctx.reply("Stol raqamini kiriting (1-50):");
+}
+
+async function handleTableText(ctx, session) {
   const text = ctx.message.text.trim();
   const tableNumber = Number(text);
 
   if (!Number.isInteger(tableNumber) || tableNumber < 1 || tableNumber > 50) {
-    return ctx.reply('Stol raqami 1 dan 50 gacha bo\'lgan butun son bo\'lishi kerak. Qayta kiriting:');
+    return ctx.reply(
+      "Stol raqami 1 dan 50 gacha bo'lgan butun son bo'lishi kerak. Qaytadan kiriting:"
+    );
   }
 
-  ctx.session.tableNumber = tableNumber;
-  ctx.session.step = 'awaiting_order_text';
-  return ctx.reply('Buyurtmani yozing (masalan: 2ta lag\'mon, 1ta choy):');
+  await updateSession(ctx.from.id, {
+    step: 'awaiting_order_text',
+    tempData: { ...(session.tempData || {}), tableNumber },
+  });
+  return ctx.reply("Buyurtmani yozing (masalan: 2ta lag'mon, 1ta choy):");
 }
 
-async function handleOrderText(ctx) {
+async function handleOrderText(ctx, session) {
   const itemsText = ctx.message.text.trim();
   if (!itemsText) {
-    return ctx.reply('Buyurtma matni bo\'sh bo\'lishi mumkin emas. Qayta kiriting:');
+    return ctx.reply("Buyurtma matni bo'sh bo'lishi mumkin emas. Qaytadan kiriting:");
   }
 
-  ctx.session.itemsText = itemsText;
-  ctx.session.step = 'awaiting_confirmation';
+  const tableNumber = (session.tempData || {}).tableNumber;
 
-  const summary =
-    `Stol: ${ctx.session.tableNumber}\n` +
-    `Buyurtma: ${itemsText}\n\n` +
-    `Tasdiqlaysizmi?`;
+  await updateSession(ctx.from.id, {
+    step: 'awaiting_confirmation',
+    tempData: { ...(session.tempData || {}), itemsText },
+  });
 
-  return ctx.reply(
-    summary,
-    Markup.inlineKeyboard([
-      [
-        Markup.button.callback('✅ Tasdiqlash', 'confirm_order'),
-        Markup.button.callback('❌ Bekor qilish', 'cancel_order'),
-      ],
-    ])
-  );
+  const summary = `Stol: ${tableNumber}\nBuyurtma: ${itemsText}\n\nTasdiqlaysizmi?`;
+
+  return ctx.reply(summary, orderConfirmKeyboard());
 }
 
 async function handleConfirmOrder(ctx) {
   await ctx.answerCbQuery();
 
-  if (ctx.session.step !== 'awaiting_confirmation' || !ctx.session.waiterId) {
+  const session = await getSession(ctx.from.id);
+
+  if (session.step !== 'awaiting_confirmation' || !session.waiterId) {
     return ctx.editMessageText('Bu buyurtma allaqachon qayta ishlangan yoki eskirgan.');
   }
 
   const orderGroup = await prisma.orderGroup.findFirst();
   if (!orderGroup) {
-    ctx.session.step = 'awaiting_table';
-    ctx.session.tableNumber = null;
-    ctx.session.itemsText = null;
-    return ctx.editMessageText(
-      'Hozircha buyurtmalar guruhi sozlanmagan, admin bilan bog\'laning.'
+    await updateSession(ctx.from.id, { step: 'idle', tempData: {} });
+    await ctx.editMessageText(
+      "Guruh hali sozlanmagan, avval 'Guruh qo'shish' orqali sozlang."
     );
+    return ctx.reply('Asosiy menyu:', mainMenuKeyboard(false));
   }
 
+  const waiter = await prisma.waiter.findUnique({ where: { id: session.waiterId } });
+  const { tableNumber, itemsText } = session.tempData || {};
+
   const order = await prisma.order.create({
-    data: {
-      waiterId: ctx.session.waiterId,
-      tableNumber: ctx.session.tableNumber,
-      itemsText: ctx.session.itemsText,
-    },
+    data: { waiterId: session.waiterId, tableNumber, itemsText },
   });
 
   const message =
     `🆕 Yangi buyurtma\n` +
     `Stol: ${order.tableNumber}\n` +
-    `Ofitsiant: ${ctx.session.waiterFullName}\n` +
+    `Ofitsiant: ${waiter.username}\n` +
     `Buyurtma: ${order.itemsText}\n` +
     `Vaqt: ${formatDateTime(order.createdAt)}`;
 
   try {
     await ctx.telegram.sendMessage(orderGroup.chatId.toString(), message);
   } catch (err) {
-    ctx.session.step = 'awaiting_table';
-    ctx.session.tableNumber = null;
-    ctx.session.itemsText = null;
-    return ctx.editMessageText(
-      'Buyurtma DB\'ga saqlandi, lekin guruhga xabar yuborib bo\'lmadi. Admin bilan bog\'laning.'
+    await updateSession(ctx.from.id, { step: 'idle', tempData: {} });
+    await ctx.editMessageText(
+      "Buyurtma DB'ga saqlandi, lekin guruhga xabar yuborib bo'lmadi. Admin bilan bog'laning."
     );
+    return ctx.reply('Asosiy menyu:', mainMenuKeyboard(true));
   }
 
-  ctx.session.tableNumber = null;
-  ctx.session.itemsText = null;
-  ctx.session.step = 'awaiting_table';
-
+  await updateSession(ctx.from.id, { step: 'idle', tempData: {} });
   await ctx.editMessageText('Buyurtma yuborildi ✅');
-  return ctx.reply('Stol raqamini kiriting (1-50):');
+  return ctx.reply('Asosiy menyu:', mainMenuKeyboard(true));
 }
 
 async function handleCancelOrder(ctx) {
   await ctx.answerCbQuery();
 
-  ctx.session.tableNumber = null;
-  ctx.session.itemsText = null;
-  ctx.session.step = 'awaiting_table';
+  await updateSession(ctx.from.id, { step: 'idle', tempData: {} });
 
   await ctx.editMessageText('Buyurtma bekor qilindi ❌');
-  return ctx.reply('Stol raqamini kiriting (1-50):');
+  const group = await prisma.orderGroup.findFirst();
+  return ctx.reply('Asosiy menyu:', mainMenuKeyboard(Boolean(group)));
 }
 
 module.exports = {
+  startNewOrder,
   handleTableText,
   handleOrderText,
   handleConfirmOrder,
