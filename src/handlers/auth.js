@@ -8,6 +8,18 @@ const SALT_ROUNDS = 10;
 const MIN_PASSWORD_LENGTH = 4;
 const MAX_LOGIN_ATTEMPTS = 3;
 
+const WELCOME_TEXT = `👋 Assalomu alaykum!
+
+Bu bot orqali siz ofitsiant sifatida ro'yxatdan o'tib, mijozlar buyurtmasini tez va qulay tarzda oshxona/bar guruhiga yubora olasiz.
+
+📋 Qanday ishlaydi:
+1. Akkount yarating yoki mavjud akkountingizga kiring
+2. Buyurtmalar yuboriladigan guruhni sozlang (faqat bir marta)
+3. Har safar yangi buyurtma kelganda: stol raqamini va buyurtmani yozasiz
+4. Bot buyurtmani avtomatik guruhga yuboradi
+
+Boshlash uchun quyidagi tugmalardan birini tanlang 👇`;
+
 function isAuthenticated(session) {
   return Boolean(session && session.waiterId);
 }
@@ -27,7 +39,7 @@ async function handleStart(ctx, session) {
     return sendMainMenu(ctx);
   }
   await resetSession(ctx.from.id);
-  return showAuthChoice(ctx);
+  return ctx.reply(WELCOME_TEXT, startKeyboard());
 }
 
 // --- Akkount yaratish ---
