@@ -1,12 +1,19 @@
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
 const { getSession } = require('./sessionStore');
-const { BTN_NEW_ORDER, BTN_ADD_GROUP, BTN_CHANGE_GROUP, BTN_LOGOUT } = require('./keyboards');
+const {
+  BTN_NEW_ORDER,
+  BTN_ADD_GROUP,
+  BTN_CHANGE_GROUP,
+  BTN_SUPPORT,
+  BTN_LOGOUT,
+} = require('./keyboards');
 const auth = require('./handlers/auth');
 const order = require('./handlers/order');
 const group = require('./handlers/group');
 const admin = require('./handlers/admin');
 const subscription = require('./handlers/subscription');
+const support = require('./handlers/support');
 
 const { BOT_TOKEN } = process.env;
 
@@ -22,6 +29,8 @@ bot.command('setgroup', group.handleSetGroupCommand);
 
 // --- Admin: obunani qo'lda faollashtirish ---
 bot.command('activate_sub', admin.handleActivateSub);
+bot.command('users', admin.handleListUsers);
+bot.command('reset_password', admin.handleResetPassword);
 
 // --- /start ---
 bot.command('start', async (ctx) => {
@@ -70,6 +79,10 @@ bot.on('text', async (ctx) => {
     if (!access.allowed) return ctx.reply(access.message);
     if (access.warning) await ctx.reply(access.warning);
     return group.showSetupInstructions(ctx);
+  }
+  if (text === BTN_SUPPORT) {
+    if (!auth.isAuthenticated(session)) return auth.showAuthChoice(ctx);
+    return support.handleSupport(ctx);
   }
   if (text === BTN_LOGOUT) {
     if (!auth.isAuthenticated(session)) return auth.showAuthChoice(ctx);
