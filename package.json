@@ -1,0 +1,22 @@
+{
+  "name": "ofitsiant-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ofitsiant buyurtma Telegram bot",
+  "main": "src/bot.js",
+  "scripts": {
+    "start": "node src/bot.js",
+    "dev": "node src/bot.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.20.0",
+    "bcrypt": "^5.1.1",
+    "dotenv": "^16.4.5",
+    "telegraf": "^4.16.3"
+  },
+  "devDependencies": {
+    "prisma": "^5.20.0"
+  }
+}

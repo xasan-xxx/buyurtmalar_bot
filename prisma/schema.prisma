@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Waiter {
+  id           Int      @id @default(autoincrement())
+  login        String   @unique
+  passwordHash String
+  fullName     String
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  orders       Order[]
+}
+
+model OrderGroup {
+  id     Int      @id @default(autoincrement())
+  chatId BigInt   @unique
+  name   String?
+  setAt  DateTime @default(now())
+}
+
+model Order {
+  id          Int      @id @default(autoincrement())
+  waiterId    Int
+  waiter      Waiter   @relation(fields: [waiterId], references: [id])
+  tableNumber Int
+  itemsText   String
+  createdAt   DateTime @default(now())
+}
