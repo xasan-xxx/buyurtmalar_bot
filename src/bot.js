@@ -6,6 +6,7 @@ const {
   BTN_ADD_GROUP,
   BTN_CHANGE_GROUP,
   BTN_SUPPORT,
+  BTN_RESET_PASSWORD,
   BTN_LOGOUT,
 } = require('./keyboards');
 const auth = require('./handlers/auth');
@@ -14,6 +15,7 @@ const group = require('./handlers/group');
 const admin = require('./handlers/admin');
 const subscription = require('./handlers/subscription');
 const support = require('./handlers/support');
+const adminPanel = require('./handlers/adminPanel');
 
 const { BOT_TOKEN } = process.env;
 
@@ -35,6 +37,9 @@ bot.command('reset_password', admin.handleResetPassword);
 // --- /start ---
 bot.command('start', async (ctx) => {
   if (ctx.chat.type !== 'private') return;
+  if (subscription.isAdmin(ctx)) {
+    return adminPanel.sendAdminMenu(ctx);
+  }
   const session = await getSession(ctx.from.id);
   return auth.handleStart(ctx, session);
 });
@@ -65,6 +70,11 @@ bot.on('text', async (ctx) => {
 
   const session = await getSession(ctx.from.id);
 
+  // Admin uchun alohida panel - login/akkount oqimlariga aralashmaydi.
+  if (subscription.isAdmin(ctx)) {
+    return adminPanel.handleAdminText(ctx, session, text);
+  }
+
   // Asosiy menyu tugmalari joriy jarayonni bekor qilib, yangi amalni boshlaydi.
   if (text === BTN_NEW_ORDER) {
     if (!auth.isAuthenticated(session)) return auth.showAuthChoice(ctx);
@@ -84,6 +94,10 @@ bot.on('text', async (ctx) => {
     if (!auth.isAuthenticated(session)) return auth.showAuthChoice(ctx);
     return support.handleSupport(ctx);
   }
+  if (text === BTN_RESET_PASSWORD) {
+    if (!auth.isAuthenticated(session)) return auth.showAuthChoice(ctx);
+    return auth.startResetPasswordSelf(ctx, session);
+  }
   if (text === BTN_LOGOUT) {
     if (!auth.isAuthenticated(session)) return auth.showAuthChoice(ctx);
     return auth.handleLogout(ctx);
@@ -98,6 +112,9 @@ bot.on('text', async (ctx) => {
       return auth.handleLoginUsername(ctx, session);
     case 'login_password':
       return auth.handleLoginPassword(ctx, session);
+    case 'reset_password_self':
+      if (!auth.isAuthenticated(session)) return auth.showAuthChoice(ctx);
+      return auth.handleResetPasswordSelfText(ctx, session);
     case 'awaiting_table':
       if (!auth.isAuthenticated(session)) return auth.showAuthChoice(ctx);
       return order.handleTableText(ctx, session);

@@ -84,7 +84,12 @@ async function handleRegPassword(ctx, session) {
 
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   const waiter = await prisma.waiter.create({
-    data: { username, passwordHash, trialEndsAt: computeTrialEndsAt() },
+    data: {
+      username,
+      passwordHash,
+      trialEndsAt: computeTrialEndsAt(),
+      creatorTelegramId: BigInt(ctx.from.id),
+    },
   });
 
   await updateSession(ctx.from.id, {
@@ -158,6 +163,43 @@ async function handleLogout(ctx) {
   return showAuthChoice(ctx);
 }
 
+// --- Parolni o'zi almashtirish ---
+
+async function startResetPasswordSelf(ctx, session) {
+  const waiter = await prisma.waiter.findUnique({ where: { id: session.waiterId } });
+  if (!waiter) {
+    await resetSession(ctx.from.id);
+    return ctx.reply('Akkount topilmadi.', startKeyboard());
+  }
+
+  if (String(waiter.creatorTelegramId) !== String(ctx.from.id)) {
+    return ctx.reply(
+      "⛔ Faqat akkountni yaratgan foydalanuvchi parolni o'zgartira oladi"
+    );
+  }
+
+  await updateSession(ctx.from.id, { step: 'reset_password_self', tempData: {} });
+  return ctx.reply('Yangi parolni kiriting (kamida 4 belgi):');
+}
+
+async function handleResetPasswordSelfText(ctx, session) {
+  const password = ctx.message.text;
+  if (!password || password.length < MIN_PASSWORD_LENGTH) {
+    return ctx.reply(
+      `Parol kamida ${MIN_PASSWORD_LENGTH} belgidan iborat bo'lishi kerak. Qaytadan kiriting:`
+    );
+  }
+
+  const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+  await prisma.waiter.update({
+    where: { id: session.waiterId },
+    data: { passwordHash },
+  });
+
+  await updateSession(ctx.from.id, { step: 'idle', tempData: {} });
+  return sendMainMenu(ctx, '✅ Parol muvaffaqiyatli o\'zgartirildi');
+}
+
 module.exports = {
   isAuthenticated,
   sendMainMenu,
@@ -170,4 +212,6 @@ module.exports = {
   handleLoginUsername,
   handleLoginPassword,
   handleLogout,
+  startResetPasswordSelf,
+  handleResetPasswordSelfText,
 };

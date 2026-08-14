@@ -14,6 +14,7 @@ model Waiter {
   fullName               String?
   active                 Boolean      @default(true)
   createdAt              DateTime     @default(now())
+  creatorTelegramId      BigInt
   trialEndsAt            DateTime
   subscriptionStatus     String       @default("trial")
   subscriptionExpiresAt  DateTime?

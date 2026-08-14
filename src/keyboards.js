@@ -4,6 +4,7 @@ const BTN_NEW_ORDER = '🆕 Yangi buyurtma';
 const BTN_ADD_GROUP = "➕ Guruh qo'shish";
 const BTN_CHANGE_GROUP = "🔄 Guruhni o'zgartirish";
 const BTN_SUPPORT = '🆘 Yordam (Support)';
+const BTN_RESET_PASSWORD = "🔑 Parolni almashtirish";
 const BTN_LOGOUT = '🚪 Akkountdan chiqish';
 
 function startKeyboard() {
@@ -18,6 +19,7 @@ function mainMenuKeyboard(hasGroup) {
   return Markup.keyboard([
     [BTN_NEW_ORDER],
     [groupLabel],
+    [BTN_RESET_PASSWORD],
     [BTN_SUPPORT],
     [BTN_LOGOUT],
   ]).resize();
@@ -37,6 +39,7 @@ module.exports = {
   BTN_ADD_GROUP,
   BTN_CHANGE_GROUP,
   BTN_SUPPORT,
+  BTN_RESET_PASSWORD,
   BTN_LOGOUT,
   startKeyboard,
   mainMenuKeyboard,
