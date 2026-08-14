@@ -11,16 +11,16 @@ function formatDateTime(date) {
 
 async function startNewOrder(ctx) {
   await updateSession(ctx.from.id, { step: 'awaiting_table', tempData: {} });
-  return ctx.reply("Stol raqamini kiriting (1-50):");
+  return ctx.reply("Stol raqamini kiriting (1-300):");
 }
 
 async function handleTableText(ctx, session) {
   const text = ctx.message.text.trim();
   const tableNumber = Number(text);
 
-  if (!Number.isInteger(tableNumber) || tableNumber < 1 || tableNumber > 50) {
+  if (!Number.isInteger(tableNumber) || tableNumber < 1 || tableNumber > 300) {
     return ctx.reply(
-      "Stol raqami 1 dan 50 gacha bo'lgan butun son bo'lishi kerak. Qaytadan kiriting:"
+      "Stol raqami 1 dan 300 gacha bo'lgan butun son bo'lishi kerak. Qaytadan kiriting:"
     );
   }
 

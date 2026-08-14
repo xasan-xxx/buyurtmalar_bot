@@ -8,22 +8,24 @@ datasource db {
 }
 
 model Waiter {
-  id           Int       @id @default(autoincrement())
-  email        String
-  username     String    @unique
+  id           Int          @id @default(autoincrement())
+  username     String       @unique
   passwordHash String
   fullName     String?
-  active       Boolean   @default(true)
-  createdAt    DateTime  @default(now())
+  active       Boolean      @default(true)
+  createdAt    DateTime     @default(now())
   orders       Order[]
   sessions     Session[]
+  orderGroups  OrderGroup[]
 }
 
 model OrderGroup {
-  id     Int      @id @default(autoincrement())
-  chatId BigInt   @unique
-  name   String?
-  setAt  DateTime @default(now())
+  id                Int      @id @default(autoincrement())
+  chatId            BigInt   @unique
+  name              String?
+  createdByWaiterId Int
+  createdBy         Waiter   @relation(fields: [createdByWaiterId], references: [id])
+  setAt             DateTime @default(now())
 }
 
 model Order {

@@ -66,8 +66,6 @@ bot.on('text', async (ctx) => {
   }
 
   switch (session.step) {
-    case 'reg_email':
-      return auth.handleRegEmail(ctx, session);
     case 'reg_username':
       return auth.handleRegUsername(ctx, session);
     case 'reg_password':

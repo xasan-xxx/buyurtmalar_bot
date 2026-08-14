@@ -4,7 +4,6 @@ const { updateSession, resetSession } = require('../sessionStore');
 const { startKeyboard, mainMenuKeyboard } = require('../keyboards');
 
 const SALT_ROUNDS = 10;
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 4;
 const MAX_LOGIN_ATTEMPTS = 3;
 
@@ -33,19 +32,7 @@ async function handleStart(ctx, session) {
 // --- Akkount yaratish ---
 
 async function startRegistration(ctx) {
-  await updateSession(ctx.from.id, { step: 'reg_email', tempData: {} });
-  return ctx.reply('Gmail manzilingizni kiriting:');
-}
-
-async function handleRegEmail(ctx, session) {
-  const email = ctx.message.text.trim();
-  if (!EMAIL_REGEX.test(email)) {
-    return ctx.reply("Email formati noto'g'ri. Qaytadan kiriting:");
-  }
-  await updateSession(ctx.from.id, {
-    step: 'reg_username',
-    tempData: { ...(session.tempData || {}), email },
-  });
+  await updateSession(ctx.from.id, { step: 'reg_username', tempData: {} });
   return ctx.reply('Username tanlang:');
 }
 
@@ -75,15 +62,15 @@ async function handleRegPassword(ctx, session) {
     );
   }
 
-  const { email, username } = session.tempData || {};
-  if (!email || !username) {
+  const { username } = session.tempData || {};
+  if (!username) {
     await resetSession(ctx.from.id);
     return showAuthChoice(ctx, "Nimadir xato ketdi, qaytadan boshlaymiz.");
   }
 
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   const waiter = await prisma.waiter.create({
-    data: { email, username, passwordHash },
+    data: { username, passwordHash },
   });
 
   await updateSession(ctx.from.id, {
@@ -162,7 +149,6 @@ module.exports = {
   showAuthChoice,
   handleStart,
   startRegistration,
-  handleRegEmail,
   handleRegUsername,
   handleRegPassword,
   startLogin,
